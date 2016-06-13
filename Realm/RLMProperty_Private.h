@@ -68,8 +68,6 @@ BOOL RLMPropertyTypeIsComputed(RLMPropertyType propertyType);
 
 // private properties
 @property (nonatomic, assign) NSUInteger index;
-@property (nonatomic, assign) char objcType;
-@property (nonatomic, copy) NSString *objcRawType;
 @property (nonatomic, assign) BOOL isPrimary;
 @property (nonatomic, assign) Ivar swiftIvar;
 
