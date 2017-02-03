@@ -21,6 +21,8 @@ x.x.x Release notes (yyyy-MM-dd)
 * `SyncSession.Progress.fractionTransferred` now returns 1 if there are no
   transferrable bytes.
 * Fix compilation issues with Xcode 8.3 beta 2.
+* Reject Swift properties with names which cause them to fall in to ARC method
+  families rather than crashing when they are accessed.
 
 2.4.2 Release notes (2017-01-30)
 =============================================================
