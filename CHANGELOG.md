@@ -13,6 +13,8 @@ x.x.x Release notes (yyyy-MM-dd)
 
 * Fix synchronized Realms not downloading remote changes when an access token
   expires and there are no local changes to upload.
+* Reject Swift properties with names which cause them to fall in to ARC method
+  families rather than crashing when they are accessed.
 
 2.4.2 Release notes (2017-01-30)
 =============================================================
