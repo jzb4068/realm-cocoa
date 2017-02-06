@@ -27,10 +27,6 @@
 #import "RLMSwiftSupport.h"
 #import "RLMUtil.hpp"
 
-BOOL RLMPropertyTypeIsNullable(RLMPropertyType propertyType) {
-    return propertyType != RLMPropertyTypeArray && propertyType != RLMPropertyTypeLinkingObjects;
-}
-
 BOOL RLMPropertyTypeIsComputed(RLMPropertyType propertyType) {
     return propertyType == RLMPropertyTypeLinkingObjects;
 }
@@ -161,32 +157,33 @@ static bool rawTypeIsComputedProperty(NSString *rawType) {
     }
 }
 
-static RLMPropertyType typeFromProtocolString(NSString *type) {
-    if (![type hasPrefix:@"RLM"]) {
-        return RLMPropertyType(-1);
+static realm::util::Optional<RLMPropertyType> typeFromProtocolString(const char *type) {
+    if (strncmp(type, "RLM", 3)) {
+        return realm::none;
     }
-    if ([type isEqualToString:@"RLMInt"]) {
+    type += 3;
+    if (strcmp(type, "Int>")) {
         return RLMPropertyTypeInt;
     }
-    if ([type isEqualToString:@"RLMFloat"]) {
+    if (strcmp(type, "Float>")) {
         return RLMPropertyTypeFloat;
     }
-    if ([type isEqualToString:@"RLMDouble"]) {
+    if (strcmp(type, "Double>")) {
         return RLMPropertyTypeDouble;
     }
-    if ([type isEqualToString:@"RLMBool"]) {
+    if (strcmp(type, "Bool>")) {
         return RLMPropertyTypeBool;
     }
-    if ([type isEqualToString:@"RLMString"]) {
+    if (strcmp(type, "String>")) {
         return RLMPropertyTypeString;
     }
-    if ([type isEqualToString:@"RLMData"]) {
+    if (strcmp(type, "Data>")) {
         return RLMPropertyTypeData;
     }
-    if ([type isEqualToString:@"RLMDate"]) {
+    if (strcmp(type, "Date>")) {
         return RLMPropertyTypeDate;
     }
-    return RLMPropertyType(-1);
+    return realm::none;
 }
 
 // determine RLMPropertyType from objc code - returns true if valid type was found/set
@@ -235,6 +232,11 @@ static RLMPropertyType typeFromProtocolString(NSString *type) {
             else if (strncmp(code, arrayPrefix, arrayPrefixLen) == 0) {
                 _optional = false;
                 _array = true;
+                if (auto type = typeFromProtocolString(code + arrayPrefixLen)) {
+                    _type = *type;
+                    return YES;
+                }
+
                 // get object class from type string - @"RLMArray<objectClassName>"
                 _objectClassName = [[NSString alloc] initWithBytes:code + arrayPrefixLen
                                                             length:strlen(code + arrayPrefixLen) - 2 // drop trailing >"
@@ -244,26 +246,19 @@ static RLMPropertyType typeFromProtocolString(NSString *type) {
                     _type = RLMPropertyTypeObject;
                     return YES;
                 }
-                _type = typeFromProtocolString(_objectClassName);
-                if (_type != -1) {
-                    return YES;
-                }
                 @throw RLMException(@"Property '%@' is of type 'RLMArray<%@>' which is not a supported RLMArray object type. "
                                     @"RLMArrays can only contain instances of RLMObject subclasses. "
                                     @"See https://realm.io/docs/objc/latest/#to-many for more information.", _name, _objectClassName);
             }
             else if (strncmp(code, numberPrefix, numberPrefixLen) == 0) {
-                // FIXME
-                // get number type from type string - @"NSNumber<objectClassName>"
-                NSString *numberType = [[NSString alloc] initWithBytes:code + numberPrefixLen
-                                                                length:strlen(code + numberPrefixLen) - 2 // drop trailing >"
-                                                              encoding:NSUTF8StringEncoding];
-                _type = typeFromProtocolString(_objectClassName);
-                if (_type != RLMPropertyTypeInt && _type != RLMPropertyTypeFloat && _type != RLMPropertyTypeDouble && _type != RLMPropertyTypeBool) {
-                    @throw RLMException(@"Property '%@' is of type 'NSNumber<%@>' which is not a supported NSNumber object type. "
-                                        @"NSNumbers can only be RLMInt, RLMFloat, RLMDouble, and RLMBool at the moment. "
-                                        @"See https://realm.io/docs/objc/latest for more information.", _name, numberType);
+                auto type = typeFromProtocolString(code + numberPrefixLen);
+                if (type && (*type == RLMPropertyTypeInt || *type == RLMPropertyTypeFloat || *type == RLMPropertyTypeDouble || *type == RLMPropertyTypeBool)) {
+                    _type = *type;
+                    return YES;
                 }
+                @throw RLMException(@"Property '%@' is of type '%s' which is not a supported NSNumber object type. "
+                                    @"NSNumbers can only be RLMInt, RLMFloat, RLMDouble, and RLMBool at the moment. "
+                                    @"See https://realm.io/docs/objc/latest for more information.", _name, code);
             }
             else if (strncmp(code, linkingObjectsPrefix, linkingObjectsPrefixLen) == 0 &&
                      (code[linkingObjectsPrefixLen] == '"' || code[linkingObjectsPrefixLen] == '<')) {
@@ -594,7 +589,8 @@ static RLMPropertyType typeFromProtocolString(NSString *type) {
         && _optional == property->_optional
         && [_name isEqualToString:property->_name]
         && (_objectClassName == property->_objectClassName  || [_objectClassName isEqualToString:property->_objectClassName])
-        && (_linkOriginPropertyName == property->_linkOriginPropertyName  || [_linkOriginPropertyName isEqualToString:property->_linkOriginPropertyName]);
+        && (_linkOriginPropertyName == property->_linkOriginPropertyName ||
+            [_linkOriginPropertyName isEqualToString:property->_linkOriginPropertyName]);
 }
 
 - (NSString *)description {
@@ -604,7 +600,7 @@ static RLMPropertyType typeFromProtocolString(NSString *type) {
 - (realm::Property)objectStoreCopy {
     realm::Property p;
     p.name = _name.UTF8String;
-    p.type = (realm::PropertyType)_type;
+    p.type = static_cast<realm::PropertyType>(_type) | (_array ? realm::PropertyType::Array : realm::PropertyType::Int);
     p.object_type = _objectClassName ? _objectClassName.UTF8String : "";
     p.is_indexed = _indexed;
     p.is_nullable = _optional;
