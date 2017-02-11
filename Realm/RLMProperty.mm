@@ -117,7 +117,6 @@ static bool rawTypeIsComputedProperty(NSString *rawType) {
             _objcType = 'f';
             break;
         case RLMPropertyTypeAny:
-        case RLMPropertyTypeArray:
         case RLMPropertyTypeData:
         case RLMPropertyTypeDate:
         case RLMPropertyTypeObject:
@@ -126,6 +125,34 @@ static bool rawTypeIsComputedProperty(NSString *rawType) {
             _objcType = '@';
             break;
     }
+}
+
+static RLMPropertyType typeFromProtocolString(NSString *type) {
+    if (![type hasPrefix:@"RLM"]) {
+        return RLMPropertyType(-1);
+    }
+    if ([type isEqualToString:@"RLMInt"]) {
+        return RLMPropertyTypeInt;
+    }
+    if ([type isEqualToString:@"RLMFloat"]) {
+        return RLMPropertyTypeFloat;
+    }
+    if ([type isEqualToString:@"RLMDouble"]) {
+        return RLMPropertyTypeDouble;
+    }
+    if ([type isEqualToString:@"RLMBool"]) {
+        return RLMPropertyTypeBool;
+    }
+    if ([type isEqualToString:@"RLMString"]) {
+        return RLMPropertyTypeString;
+    }
+    if ([type isEqualToString:@"RLMData"]) {
+        return RLMPropertyTypeData;
+    }
+    if ([type isEqualToString:@"RLMDate"]) {
+        return RLMPropertyTypeDate;
+    }
+    return RLMPropertyType(-1);
 }
 
 // determine RLMPropertyType from objc code - returns true if valid type was found/set
@@ -173,38 +200,32 @@ static bool rawTypeIsComputedProperty(NSString *rawType) {
             }
             else if (strncmp(code, arrayPrefix, arrayPrefixLen) == 0) {
                 _optional = false;
+                _array = true;
                 // get object class from type string - @"RLMArray<objectClassName>"
-                _type = RLMPropertyTypeArray;
                 _objectClassName = [[NSString alloc] initWithBytes:code + arrayPrefixLen
                                                             length:strlen(code + arrayPrefixLen) - 2 // drop trailing >"
                                                           encoding:NSUTF8StringEncoding];
 
-                Class cls = [RLMSchema classForString:_objectClassName];
-                if (!cls) {
-                    @throw RLMException(@"Property '%@' is of type 'RLMArray<%@>' which is not a supported RLMArray object type. "
-                                        @"RLMArrays can only contain instances of RLMObject subclasses. "
-                                        @"See https://realm.io/docs/objc/latest/#to-many for more information.", _name, _objectClassName);
+                if ([RLMSchema classForString:_objectClassName]) {
+                    _type = RLMPropertyTypeObject;
+                    return YES;
                 }
+                _type = typeFromProtocolString(_objectClassName);
+                if (_type != -1) {
+                    return YES;
+                }
+                @throw RLMException(@"Property '%@' is of type 'RLMArray<%@>' which is not a supported RLMArray object type. "
+                                    @"RLMArrays can only contain instances of RLMObject subclasses. "
+                                    @"See https://realm.io/docs/objc/latest/#to-many for more information.", _name, _objectClassName);
             }
             else if (strncmp(code, numberPrefix, numberPrefixLen) == 0) {
+                // FIXME
                 // get number type from type string - @"NSNumber<objectClassName>"
                 NSString *numberType = [[NSString alloc] initWithBytes:code + numberPrefixLen
                                                                 length:strlen(code + numberPrefixLen) - 2 // drop trailing >"
                                                               encoding:NSUTF8StringEncoding];
-
-                if ([numberType isEqualToString:@"RLMInt"]) {
-                    _type = RLMPropertyTypeInt;
-                }
-                else if ([numberType isEqualToString:@"RLMFloat"]) {
-                    _type = RLMPropertyTypeFloat;
-                }
-                else if ([numberType isEqualToString:@"RLMDouble"]) {
-                    _type = RLMPropertyTypeDouble;
-                }
-                else if ([numberType isEqualToString:@"RLMBool"]) {
-                    _type = RLMPropertyTypeBool;
-                }
-                else {
+                _type = typeFromProtocolString(_objectClassName);
+                if (_type != RLMPropertyTypeInt && _type != RLMPropertyTypeFloat && _type != RLMPropertyTypeDouble && _type != RLMPropertyTypeBool) {
                     @throw RLMException(@"Property '%@' is of type 'NSNumber<%@>' which is not a supported NSNumber object type. "
                                         @"NSNumbers can only be RLMInt, RLMFloat, RLMDouble, and RLMBool at the moment. "
                                         @"See https://realm.io/docs/objc/latest for more information.", _name, numberType);
@@ -444,7 +465,8 @@ static bool rawTypeIsComputedProperty(NSString *rawType) {
     }
 
     _name = name;
-    _type = RLMPropertyTypeArray;
+    _type = RLMPropertyTypeObject;
+    _array = true;
     _objectClassName = objectClassName;
     _objcType = 't';
     _swiftIvar = ivar;

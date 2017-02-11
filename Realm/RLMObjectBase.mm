@@ -88,17 +88,28 @@ static id validatedObjectForProperty(id obj, RLMProperty *prop, RLMSchema *schem
         RLMObjectSchema *objSchema = schema[prop.objectClassName];
         return [[objSchema.objectClass alloc] initWithValue:obj schema:schema];
     }
-    else if (prop.type == RLMPropertyTypeArray && [obj conformsToProtocol:@protocol(NSFastEnumeration)]) {
-        // for arrays, create objects for each element and return new array
-        RLMObjectSchema *objSchema = schema[prop.objectClassName];
-        RLMArray *objects = [[RLMArray alloc] initWithObjectClassName:objSchema.className];
+    else if (prop.array && [obj conformsToProtocol:@protocol(NSFastEnumeration)]) {
+        if (prop.type == RLMPropertyTypeObject) {
+            // for arrays, create objects for each element and return new array
+            RLMObjectSchema *objSchema = schema[prop.objectClassName];
+            RLMArray *objects = [[RLMArray alloc] initWithObjectClassName:objSchema.className];
+            for (id el in obj) {
+                [objects addObject:[[objSchema.objectClass alloc] initWithValue:el schema:schema]];
+            }
+            return objects;
+        }
+        // FIXME
+        RLMArray *objects = [[RLMArray alloc] initWithObjectClassName:prop.objectClassName];
         for (id el in obj) {
-            [objects addObject:[[objSchema.objectClass alloc] initWithValue:el schema:schema]];
+            if (!RLMIsObjectValidForProperty(el, prop))
+                goto error;
+            [objects addObject:el];
         }
         return objects;
     }
 
     // if not convertible to prop throw
+error:
     @throw RLMException(@"Invalid value '%@' for property '%@'", obj, prop.name);
 }
 
@@ -186,7 +197,7 @@ id RLMCreateManagedAccessor(Class cls, __unsafe_unretained RLMRealm *realm, RLMC
 - (void)setValue:(id)value forUndefinedKey:(NSString *)key {
     RLMProperty *property = _objectSchema[key];
     if (Ivar ivar = property.swiftIvar) {
-        if (property.type == RLMPropertyTypeArray && [value conformsToProtocol:@protocol(NSFastEnumeration)]) {
+        if (property.array && [value conformsToProtocol:@protocol(NSFastEnumeration)]) {
             RLMArray *array = [object_getIvar(self, ivar) _rlmArray];
             [array removeAllObjects];
             [array addObjects:validatedObjectForProperty(value, property, RLMSchema.partialSharedSchema)];

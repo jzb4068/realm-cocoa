@@ -186,7 +186,6 @@ public:
     {
         switch (type()) {
             case RLMPropertyTypeObject:
-            case RLMPropertyTypeArray:
             case RLMPropertyTypeLinkingObjects:
                 return m_schema[property().objectClassName];
             default:
@@ -197,9 +196,8 @@ public:
     bool has_links() const { return m_links.size(); }
 
     bool has_any_to_many_links() const {
-        return std::any_of(begin(m_links), end(m_links), [](RLMProperty *property) {
-            return property.type == RLMPropertyTypeArray || property.type == RLMPropertyTypeLinkingObjects;
-        });
+        return std::any_of(begin(m_links), end(m_links),
+                           [](RLMProperty *property) { return property.array; });
     }
 
     ColumnReference last_link_column() const {

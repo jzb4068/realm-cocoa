@@ -77,12 +77,10 @@ typedef NS_ENUM(int32_t, RLMPropertyType) {
     /** Dates: `NSDate` */
     RLMPropertyTypeDate   = 8,
 
-#pragma mark - Array/Linked object types
+#pragma mark - Linked object types
 
     /** Realm model objects. See [Realm Models](https://realm.io/docs/objc/latest/#models) for more information. */
     RLMPropertyTypeObject = 12,
-    /** Realm arrays. See [Realm Models](https://realm.io/docs/objc/latest/#models) for more information. */
-    RLMPropertyTypeArray  = 13,
     /** Realm linking objects. See [Realm Models](https://realm.io/docs/objc/latest/#models) for more information. */
     RLMPropertyTypeLinkingObjects = 14,
 };
